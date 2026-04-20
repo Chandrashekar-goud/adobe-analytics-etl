@@ -26,4 +26,4 @@ config/prod.env
 
 # AWS packaging artifacts
 dist/
-EOF
+EOFAWSCLIV2.pkg
