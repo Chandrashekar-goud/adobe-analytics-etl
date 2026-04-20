@@ -140,16 +140,21 @@ jobs:
       # ----------------------------------------------------------
       - name: Update AWS Glue Job
         run: |
+          # Fetch the role ARN dynamically so it's never hardcoded
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/GlueETLRole-dev"
+
           aws glue update-job \
             --job-name "${{ secrets.GLUE_JOB_NAME }}" \
             --job-update "{
+              \"Role\": \"${ROLE_ARN}\",
               \"Command\": {
                 \"Name\": \"glueetl\",
                 \"ScriptLocation\": \"s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/main.py\",
                 \"PythonVersion\": \"3\"
               },
               \"DefaultArguments\": {
-                \"--extra-py-files\": \"s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/src.zip,s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/dependencies.zip\",
+                \"--extra-py-files\": \"s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/src.zip\",
                 \"--output\": \"s3://${{ secrets.S3_PROCESSED_BUCKET }}/results/\",
                 \"--job-language\": \"python\",
                 \"--enable-continuous-cloudwatch-log\": \"true\",
