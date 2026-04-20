@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search Keyword Performance — Adobe Analytics ETL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:   #0B1629;
+    --navy2:  #112040;
+    --teal:   #00C9A7;
+    --teal2:  #00A88E;
+    --amber:  #F59E0B;
+    --white:  #F0F4FF;
+    --muted:  #7B8FAB;
+    --card:   #141F35;
+    --border: rgba(0,201,167,0.15);
+    --font-display: 'Syne', sans-serif;
+    --font-body:    'DM Sans', sans-serif;
+    --font-mono:    'DM Mono', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--navy);
+    color: var(--white);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Grid background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,201,167,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,201,167,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Glow orbs ── */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .orb-1 { width: 600px; height: 600px; background: rgba(0,201,167,0.08); top: -200px; right: -100px; }
+  .orb-2 { width: 400px; height: 400px; background: rgba(245,158,11,0.06); bottom: 20%; left: -100px; }
+
+  /* ── Layout ── */
+  .page { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 2rem; }
+
+  /* ── Nav ── */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(11,22,41,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    max-width: 100%;
+  }
+  .nav-brand {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--teal);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .nav-link {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.4rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .nav-link:hover { color: var(--teal); border-color: var(--teal); }
+  .nav-link svg { width: 14px; height: 14px; }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 7rem 0 5rem;
+    position: relative;
+  }
+  .hero-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--teal);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    padding: 0.35rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(0,201,167,0.05);
+  }
+  .hero-tag::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--teal);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.8rem, 6vw, 5rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.5rem;
+  }
+  h1 span { color: var(--teal); }
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--muted);
+    max-width: 560px;
+    margin-bottom: 2.5rem;
+    font-weight: 300;
+  }
+  .hero-cta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.5rem;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s;
+    cursor: pointer;
+    border: none;
+  }
+  .btn-primary { background: var(--teal); color: var(--navy); }
+  .btn-primary:hover { background: var(--teal2); transform: translateY(-1px); }
+  .btn-outline { background: transparent; color: var(--white); border: 1px solid rgba(240,244,255,0.2); }
+  .btn-outline:hover { border-color: var(--teal); color: var(--teal); }
+
+  /* ── Stats strip ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 4rem 0;
+  }
+  .stat {
+    background: var(--card);
+    padding: 1.75rem 1.5rem;
+    text-align: center;
+    transition: background 0.2s;
+  }
+  .stat:hover { background: var(--navy2); }
+  .stat-val {
+    font-family: var(--font-display);
+    font-size: 2.4rem;
+    font-weight: 800;
+    color: var(--teal);
+    line-height: 1;
+    margin-bottom: 0.4rem;
+  }
+  .stat-lbl {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Section headers ── */
+  .section { padding: 4rem 0; }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--teal);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 0.75rem;
+  }
+  h2 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 2.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  /* ── Results table ── */
+  .results-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .results-header {
+    padding: 1.25rem 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-title {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--teal);
+    letter-spacing: 0.1em;
+  }
+  .file-badge {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    background: rgba(0,201,167,0.06);
+    padding: 0.3rem 0.7rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: rgba(0,201,167,0.05); }
+  th {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.9rem 1.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 1rem 1.75rem;
+    border-bottom: 1px solid rgba(0,201,167,0.07);
+    font-size: 0.95rem;
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background 0.15s; }
+  tbody tr:hover { background: rgba(0,201,167,0.04); }
+  .engine-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+  }
+  .engine-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .keyword-chip {
+    display: inline-block;
+    background: rgba(0,201,167,0.08);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.2rem 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--white);
+  }
+  .revenue-cell {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+  .revenue-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .revenue-bar {
+    height: 4px;
+    border-radius: 2px;
+    transition: width 1.2s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  /* ── Pipeline flow ── */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  .pipe-step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    position: relative;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .pipe-step:hover { border-color: var(--teal); transform: translateY(-2px); }
+  .pipe-num {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--teal);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.6rem;
+  }
+  .pipe-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+    color: var(--white);
+  }
+  .pipe-desc {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .pipe-tag {
+    display: inline-block;
+    margin-top: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--amber);
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 3px;
+    padding: 0.2rem 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Tech stack ── */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+  }
+  .stack-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1rem;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .stack-item:hover { border-color: var(--teal); background: var(--navy2); }
+  .stack-icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .stack-name {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--white);
+    font-weight: 500;
+  }
+  .stack-sub {
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin-top: 0.2rem;
+  }
+
+  /* ── Attribution explainer ── */
+  .session-flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+  .hit-card {
+    flex: 1;
+    min-width: 150px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-right: none;
+    padding: 1.25rem 1rem;
+    position: relative;
+    transition: background 0.2s;
+  }
+  .hit-card:last-child { border-right: 1px solid var(--border); border-radius: 0 8px 8px 0; }
+  .hit-card:first-child { border-radius: 8px 0 0 8px; }
+  .hit-card.highlight {
+    background: rgba(0,201,167,0.08);
+    border-color: var(--teal);
+  }
+  .hit-card.highlight + .hit-card { border-left-color: var(--border); }
+  .hit-label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.4rem;
+  }
+  .hit-page {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 0.6rem;
+  }
+  .hit-ref {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    word-break: break-all;
+  }
+  .hit-ref.search { color: var(--teal); }
+  .hit-event {
+    display: inline-block;
+    margin-top: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.25);
+    color: var(--amber);
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+  }
+  .hit-purchase {
+    margin-top: 0.5rem;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--teal);
+  }
+  .attribution-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    color: var(--muted);
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2.5rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .footer-brand {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .footer-brand strong { color: var(--teal); }
+  .footer-links { display: flex; gap: 1.5rem; }
+  .footer-link {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-link:hover { color: var(--teal); }
+
+  /* ── Animations ── */
+  .fade-up {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .fade-up.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (max-width: 768px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .pipeline { grid-template-columns: 1fr; }
+    .stack-grid { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 2.4rem; }
+    .session-flow { flex-direction: column; }
+    .hit-card { border-right: 1px solid var(--border); border-radius: 8px !important; margin-bottom: 0.5rem; }
+    .attribution-arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<!-- Nav -->
+<nav>
+  <span class="nav-brand">// search-keyword-etl</span>
+  <a class="nav-link" href="https://github.com/Chandrashekar-goud/adobe-analytics-etl" target="_blank">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+    View on GitHub
+  </a>
+</nav>
+
+<!-- Hero -->
+<div class="page">
+  <section class="hero fade-up">
+    <div class="hero-tag">Live ETL Demo — AWS Glue + PySpark</div>
+    <h1>Search Keyword<br><span>Performance</span></h1>
+    <p class="hero-sub">Which external search engine keywords drive the most revenue? This pipeline processes Adobe Analytics hit-level data and answers that question — end to end, on AWS.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#results">View Results</a>
+      <a class="btn btn-outline" href="https://github.com/Chandrashekar-goud/adobe-analytics-etl" target="_blank">GitHub Repository</a>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <div class="stats fade-up">
+    <div class="stat">
+      <div class="stat-val">3</div>
+      <div class="stat-lbl">Search Engines</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">$730</div>
+      <div class="stat-lbl">Revenue Tracked</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">20</div>
+      <div class="stat-lbl">Unit Tests</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">100%</div>
+      <div class="stat-lbl">Automated Deploy</div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <section class="section fade-up" id="results">
+    <div class="section-label">// output</div>
+    <h2>ETL Results</h2>
+    <div class="results-wrap">
+      <div class="results-header">
+        <span class="results-title">SEARCH_KEYWORD_PERFORMANCE</span>
+        <span class="file-badge">2026-04-20_SearchKeywordPerformance.tab</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Search Engine Domain</th>
+            <th>Search Keyword</th>
+            <th>Revenue</th>
+            <th style="min-width:180px">Distribution</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <span class="engine-badge">
+                <span class="engine-dot" style="background:#4285F4"></span>
+                google.com
+              </span>
+            </td>
+            <td><span class="keyword-chip">Ipod</span></td>
+            <td>
+              <div class="revenue-cell" style="color:#00C9A7">$290.00</div>
+            </td>
+            <td>
+              <div class="revenue-bar-wrap">
+                <div class="revenue-bar" id="bar1" style="width:0;background:#00C9A7;max-width:120px"></div>
+                <span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted)">39.7%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="engine-badge">
+                <span class="engine-dot" style="background:#00A4EF"></span>
+                bing.com
+              </span>
+            </td>
+            <td><span class="keyword-chip">Zune</span></td>
+            <td>
+              <div class="revenue-cell" style="color:#F59E0B">$250.00</div>
+            </td>
+            <td>
+              <div class="revenue-bar-wrap">
+                <div class="revenue-bar" id="bar2" style="width:0;background:#F59E0B;max-width:104px"></div>
+                <span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted)">34.2%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <span class="engine-badge">
+                <span class="engine-dot" style="background:#4285F4"></span>
+                google.com
+              </span>
+            </td>
+            <td><span class="keyword-chip">ipod</span></td>
+            <td>
+              <div class="revenue-cell" style="color:#7B8FAB">$190.00</div>
+            </td>
+            <td>
+              <div class="revenue-bar-wrap">
+                <div class="revenue-bar" id="bar3" style="width:0;background:#7B8FAB;max-width:78px"></div>
+                <span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted)">26.0%</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Attribution -->
+  <section class="section fade-up" id="how">
+    <div class="section-label">// attribution model</div>
+    <h2>How Revenue is Attributed</h2>
+    <p style="color:var(--muted);margin-bottom:2rem;max-width:600px;font-size:0.95rem">The search keyword and the purchase revenue exist on <em style="color:var(--white)">different hits</em> within the same session. A Spark Window function propagates the first search referrer forward to all downstream hits — including the purchase.</p>
+
+    <div class="session-flow">
+      <div class="hit-card highlight">
+        <div class="hit-label">Hit 1 — Home</div>
+        <div class="hit-page">Home</div>
+        <div class="hit-ref search">google.com<br>?q=Ipod</div>
+        <div class="hit-event">search origin</div>
+      </div>
+      <div class="hit-card">
+        <div class="hit-label">Hit 2</div>
+        <div class="hit-page">Search Results</div>
+        <div class="hit-ref">esshopzilla.com</div>
+      </div>
+      <div class="hit-card">
+        <div class="hit-label">Hit 3</div>
+        <div class="hit-page">iPod Nano</div>
+        <div class="hit-ref">esshopzilla.com</div>
+        <div class="hit-event">event: 2 — product view</div>
+      </div>
+      <div class="hit-card">
+        <div class="hit-label">Hit 4</div>
+        <div class="hit-page">Shopping Cart</div>
+        <div class="hit-ref">esshopzilla.com</div>
+        <div class="hit-event">event: 12 — add to cart</div>
+      </div>
+      <div class="hit-card highlight">
+        <div class="hit-label">Hit 5 — Purchase</div>
+        <div class="hit-page">Order Complete</div>
+        <div class="hit-ref">esshopzilla.com</div>
+        <div class="hit-event">event: 1 — PURCHASE</div>
+        <div class="hit-purchase">$290.00</div>
+      </div>
+    </div>
+
+    <p style="margin-top:1.25rem;font-family:var(--font-mono);font-size:0.75rem;color:var(--muted);padding:0.75rem 1rem;background:rgba(0,201,167,0.04);border:1px solid var(--border);border-radius:6px">
+      Window.partitionBy("ip").orderBy("hit_time_gmt") → first("search_domain", ignorenulls=True)
+    </p>
+  </section>
+
+  <!-- Pipeline -->
+  <section class="section fade-up" id="pipeline">
+    <div class="section-label">// etl stages</div>
+    <h2>Pipeline Flow</h2>
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="pipe-num">STAGE 01</div>
+        <div class="pipe-title">Read & Validate</div>
+        <div class="pipe-desc">Schema-validated TSV read with Spark CSV reader. PERMISSIVE mode logs corrupt rows without failing the job.</div>
+        <span class="pipe-tag">spark.read.csv</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">STAGE 02</div>
+        <div class="pipe-title">Parse Referrers</div>
+        <div class="pipe-desc">Spark UDFs extract search engine domain and keyword from the referrer URL on every hit row.</div>
+        <span class="pipe-tag">@udf(StringType)</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">STAGE 03</div>
+        <div class="pipe-title">Session Attribution</div>
+        <div class="pipe-desc">Window function propagates first-touch search keyword forward across all hits in a session.</div>
+        <span class="pipe-tag">Window.partitionBy</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">STAGE 04</div>
+        <div class="pipe-title">Filter Purchases</div>
+        <div class="pipe-desc">Regex match for standalone event "1" — avoids false matches against events 10, 11, 12, 13, 14.</div>
+        <span class="pipe-tag">rlike regex</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">STAGE 05</div>
+        <div class="pipe-title">Parse Revenue</div>
+        <div class="pipe-desc">Explodes semicolon-delimited product_list, extracts 4th field (revenue), sums per hit.</div>
+        <span class="pipe-tag">F.explode</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-num">STAGE 06</div>
+        <div class="pipe-title">Aggregate & Write</div>
+        <div class="pipe-desc">Groups by engine + keyword, sums revenue, sorts descending. Writes tab-delimited output to S3.</div>
+        <span class="pipe-tag">.groupBy().agg()</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section class="section fade-up" id="stack">
+    <div class="section-label">// tech stack</div>
+    <h2>Built With</h2>
+    <div class="stack-grid">
+      <div class="stack-item">
+        <span class="stack-icon">⚡</span>
+        <div class="stack-name">PySpark 3.5</div>
+        <div class="stack-sub">Distributed processing</div>
+      </div>
+      <div class="stack-item">
+        <span class="stack-icon">☁️</span>
+        <div class="stack-name">AWS Glue</div>
+        <div class="stack-sub">Serverless ETL</div>
+      </div>
+      <div class="stack-item">
+        <span class="stack-icon">🪣</span>
+        <div class="stack-name">Amazon S3</div>
+        <div class="stack-sub">Landing · Scripts · Output</div>
+      </div>
+      <div class="stack-item">
+        <span class="stack-icon">🔄</span>
+        <div class="stack-name">GitHub Actions</div>
+        <div class="stack-sub">CI/CD pipeline</div>
+      </div>
+      <div class="stack-item">
+        <span class="stack-icon">🧪</span>
+        <div class="stack-name">pytest</div>
+        <div class="stack-sub">20 unit tests</div>
+      </div>
+      <div class="stack-item">
+        <span class="stack-icon">🔐</span>
+        <div class="stack-name">IAM</div>
+        <div class="stack-sub">Least-privilege access</div>
+      </div>
+      <div class="stack-item">
+        <span class="stack-icon">🐍</span>
+        <div class="stack-name">Python 3.9</div>
+        <div class="stack-sub">Modular architecture</div>
+      </div>
+      <div class="stack-item">
+        <span class="stack-icon">📊</span>
+        <div class="stack-name">Window Functions</div>
+        <div class="stack-sub">Session attribution</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="fade-up">
+    <div class="footer-brand">
+      Built by <strong>Chandrashekar Goud</strong> — Data Engineer Assessment
+    </div>
+    <div class="footer-links">
+      <a class="footer-link" href="https://github.com/Chandrashekar-goud/adobe-analytics-etl" target="_blank">GitHub</a>
+      <a class="footer-link" href="https://github.com/Chandrashekar-goud/adobe-analytics-etl/blob/main/README.md" target="_blank">README</a>
+      <a class="footer-link" href="https://github.com/Chandrashekar-goud/adobe-analytics-etl/actions" target="_blank">CI/CD</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+  // Animate bars after page load
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      document.getElementById('bar1').style.width = '120px';
+      document.getElementById('bar2').style.width = '103px';
+      document.getElementById('bar3').style.width = '78px';
+    }, 600);
+  });
+
+  // Intersection observer for fade-up animations
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => entry.target.classList.add('visible'), i * 80);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
