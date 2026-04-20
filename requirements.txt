@@ -1,0 +1,4 @@
+# Runtime — installed on Glue/EMR workers
+# PySpark is provided by the cluster — do NOT include it here
+# (adding it would conflict with the cluster's managed version)
+pandas>=1.5.0,<3.0.0

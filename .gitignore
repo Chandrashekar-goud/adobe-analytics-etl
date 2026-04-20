@@ -1,0 +1,29 @@
+cat > .gitignore << 'EOF'
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Output files
+output/
+glue_output.tab
+
+# Environment files (never commit credentials)
+config/prod.env
+.env
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# AWS packaging artifacts
+dist/
+EOF

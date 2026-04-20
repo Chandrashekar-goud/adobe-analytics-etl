@@ -1,0 +1,197 @@
+# ============================================================
+# CI/CD Pipeline — Search Keyword Performance ETL
+# ============================================================
+#
+# Triggers:
+#   push to main  → run tests + deploy to AWS
+#   pull request  → run tests only
+#
+# Required GitHub Repository Secrets:
+#   AWS_ACCESS_KEY_ID         - IAM user access key
+#   AWS_SECRET_ACCESS_KEY     - IAM user secret key
+#   AWS_REGION                - e.g. us-east-1
+#   S3_SCRIPTS_BUCKET         - bucket for Glue scripts & deps
+#   S3_LANDING_BUCKET         - bucket for raw input data
+#   S3_PROCESSED_BUCKET       - bucket for ETL output
+#   GLUE_JOB_NAME             - name of the AWS Glue job
+# ============================================================
+
+name: CI/CD — Deploy ETL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.9"
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # Job 1: Test
+  # Runs on every push and PR — fast feedback loop.
+  # ──────────────────────────────────────────────────────────
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pytest with coverage
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=short \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+  # ──────────────────────────────────────────────────────────
+  # Job 2: Deploy
+  # Only runs on push to main AFTER tests pass.
+  # ──────────────────────────────────────────────────────────
+  deploy:
+    name: Package & Deploy to AWS
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      # ----------------------------------------------------------
+      # Package source code
+      # Glue loads the src.zip via --extra-py-files so our modules
+      # are importable without modifying sys.path manually.
+      # ----------------------------------------------------------
+      - name: Package source modules
+        run: |
+          mkdir -p dist
+          cd src && zip -r ../dist/src.zip . && cd ..
+          echo "src.zip contents:"
+          unzip -l dist/src.zip
+
+      # ----------------------------------------------------------
+      # Package third-party dependencies
+      # We install into a local folder and zip it.
+      # Glue workers unzip --extra-py-files automatically.
+      # ----------------------------------------------------------
+      - name: Package Python dependencies
+        run: |
+          mkdir -p build/python_libs
+          pip install -r requirements.txt \
+              --target build/python_libs \
+              --platform manylinux2014_x86_64 \
+              --python-version 3.9 \
+              --only-binary=:all: \
+              --upgrade
+          cd build/python_libs && zip -r ../../dist/dependencies.zip . && cd ../..
+          echo "dependencies.zip size: $(du -sh dist/dependencies.zip | cut -f1)"
+
+      # ----------------------------------------------------------
+      # Upload artifacts to S3 scripts bucket
+      # ----------------------------------------------------------
+      - name: Upload packages to S3
+        run: |
+          aws s3 cp dist/src.zip \
+            s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/src.zip \
+            --sse AES256
+
+          aws s3 cp dist/dependencies.zip \
+            s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/dependencies.zip \
+            --sse AES256
+
+          # Also upload the main entry point script for Glue
+          aws s3 cp src/main.py \
+            s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/main.py \
+            --sse AES256
+
+          echo "Artifacts uploaded to s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/"
+
+      # ----------------------------------------------------------
+      # Update the Glue Job definition to point at the new script
+      # ----------------------------------------------------------
+      - name: Update AWS Glue Job
+        run: |
+          aws glue update-job \
+            --job-name "${{ secrets.GLUE_JOB_NAME }}" \
+            --job-update "{
+              \"Command\": {
+                \"Name\": \"glueetl\",
+                \"ScriptLocation\": \"s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/main.py\",
+                \"PythonVersion\": \"3\"
+              },
+              \"DefaultArguments\": {
+                \"--extra-py-files\": \"s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/src.zip,s3://${{ secrets.S3_SCRIPTS_BUCKET }}/scripts/dependencies.zip\",
+                \"--output\": \"s3://${{ secrets.S3_PROCESSED_BUCKET }}/results/\",
+                \"--job-language\": \"python\",
+                \"--enable-continuous-cloudwatch-log\": \"true\",
+                \"--enable-metrics\": \"true\"
+              }
+            }"
+
+          echo "Glue job updated: ${{ secrets.GLUE_JOB_NAME }}"
+
+      # ----------------------------------------------------------
+      # Trigger a Glue Job run against the latest input file
+      # ----------------------------------------------------------
+      - name: Trigger Glue Job run
+        run: |
+          RUN_ID=$(aws glue start-job-run \
+            --job-name "${{ secrets.GLUE_JOB_NAME }}" \
+            --arguments "{
+              \"--input\": \"s3://${{ secrets.S3_LANDING_BUCKET }}/data/data.sql\"
+            }" \
+            --query 'JobRunId' \
+            --output text)
+
+          echo "Glue Job Run started: $RUN_ID"
+          echo "GLUE_RUN_ID=$RUN_ID" >> $GITHUB_ENV
+
+      # ----------------------------------------------------------
+      # Poll the job run until it completes (max 10 min)
+      # ----------------------------------------------------------
+      - name: Wait for Glue Job completion
+        run: |
+          echo "Polling job run: $GLUE_RUN_ID"
+          for i in $(seq 1 20); do
+            STATUS=$(aws glue get-job-run \
+              --job-name "${{ secrets.GLUE_JOB_NAME }}" \
+              --run-id "$GLUE_RUN_ID" \
+              --query 'JobRun.JobRunState' \
+              --output text)
+            echo "  Attempt $i/20 — Status: $STATUS"
+            case "$STATUS" in
+              SUCCEEDED) echo "Job SUCCEEDED."; exit 0;;
+              FAILED|ERROR|TIMEOUT|STOPPED) echo "Job FAILED with status: $STATUS"; exit 1;;
+            esac
+            sleep 30
+          done
+          echo "Timed out waiting for job completion."
+          exit 1

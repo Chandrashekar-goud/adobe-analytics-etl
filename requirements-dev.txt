@@ -1,0 +1,6 @@
+-r requirements.txt
+
+pyspark==3.5.3
+pytest==7.4.0
+pytest-cov==4.1.0
+pyarrow>=1.0.0
