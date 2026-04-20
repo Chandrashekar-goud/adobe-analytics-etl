@@ -17,7 +17,6 @@ AWS EMR (via spark-submit):
 
 import argparse
 import os
-import sys
 
 from pyspark.sql import SparkSession
 
@@ -133,4 +132,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
