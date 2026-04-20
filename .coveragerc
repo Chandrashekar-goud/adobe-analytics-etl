@@ -1,0 +1,13 @@
+# .coveragerc
+[run]
+source = src
+omit =
+    # Entry point — tested via integration, not unit tests
+    src/main.py
+
+[report]
+exclude_lines =
+    # Don't flag defensive exception handlers
+    except Exception
+    # Don't flag abstract methods
+    pragma: no cover
